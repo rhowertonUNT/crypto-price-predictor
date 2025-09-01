@@ -1,2 +1,2 @@
 # crypto-price-predictor
-Interactive ML platform for Bitcoin price prediction using TensorFlow.js
+Interactive machine learning platform for cryptocurrency price prediction using TensorFlow.js
