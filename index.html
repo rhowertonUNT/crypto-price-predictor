@@ -232,11 +232,12 @@
         
         <div class="header">
             <h1>🚀 Multi-Crypto ML Platform</h1>
-            <p class="subtitle">Interactive Price Prediction for XRP, XLM, and Bitcoin</p>
+            <p class="subtitle">Advanced Price Prediction for 8 Major Cryptocurrencies</p>
             
             <div class="author-credit">
-                <h3>🎯 Machine Learning Portfolio Project</h3>
-                <p>Demonstrating time series forecasting and neural networks</p>
+                <h3>🎯 Advanced ML Portfolio Project</h3>
+                <p>Multi-asset cryptocurrency analysis with real-time data integration</p>
+                <p><strong>Coverage:</strong> Bitcoin, Ethereum, Cardano, Solana, Hedera, Algorand, XRP, Stellar</p>
             </div>
         </div>
         
@@ -253,9 +254,20 @@
             <div>
                 <label>Cryptocurrency:</label>
                 <select id="cryptoType" onchange="updateCrypto()">
-                    <option value="btc">Bitcoin (BTC)</option>
-                    <option value="xrp">XRP (Ripple)</option>
-                    <option value="xlm">Stellar Lumens (XLM)</option>
+                    <optgroup label="Layer 1 Blockchains">
+                        <option value="btc">Bitcoin (BTC)</option>
+                        <option value="eth">Ethereum (ETH)</option>
+                        <option value="ada">Cardano (ADA)</option>
+                        <option value="sol">Solana (SOL)</option>
+                    </optgroup>
+                    <optgroup label="Enterprise & DeFi">
+                        <option value="hbar">Hedera (HBAR)</option>
+                        <option value="algo">Algorand (ALGO)</option>
+                    </optgroup>
+                    <optgroup label="Payment & Transfer">
+                        <option value="xrp">XRP (Ripple)</option>
+                        <option value="xlm">Stellar Lumens (XLM)</option>
+                    </optgroup>
                 </select>
                 
                 <label>Data Period:</label>
@@ -316,6 +328,11 @@
         
         const cryptoConfig = {
             btc: { name: 'Bitcoin', symbol: 'BTC', id: 'bitcoin', color: '#f7931a' },
+            eth: { name: 'Ethereum', symbol: 'ETH', id: 'ethereum', color: '#627eea' },
+            ada: { name: 'Cardano', symbol: 'ADA', id: 'cardano', color: '#0033ad' },
+            sol: { name: 'Solana', symbol: 'SOL', id: 'solana', color: '#9945ff' },
+            hbar: { name: 'Hedera', symbol: 'HBAR', id: 'hedera-hashgraph', color: '#00b4aa' },
+            algo: { name: 'Algorand', symbol: 'ALGO', id: 'algorand', color: '#000000' },
             xrp: { name: 'XRP', symbol: 'XRP', id: 'ripple', color: '#00aae4' },
             xlm: { name: 'Stellar', symbol: 'XLM', id: 'stellar', color: '#7c4dff' }
         };
@@ -609,9 +626,11 @@
         
         // Initialize
         log("🌟 Multi-Crypto ML Platform initialized");
-        log("🌐 Click 'Load Real Data' to analyze live market prices");
-        log("🎲 Or use 'Generate Sample Data' for demo mode");
-        log("📚 UNT Alumni project showcasing ML engineering skills");
+        log("🌐 Now supporting 8 major cryptocurrencies:");
+        log("   Layer 1: Bitcoin, Ethereum, Cardano, Solana");
+        log("   Enterprise: Hedera (HBAR), Algorand (ALGO)"); 
+        log("   Payments: XRP, Stellar Lumens");
+        log("📚 UNT Alumni - Advanced ML Portfolio Project");
     </script>
 </body>
 </html>
