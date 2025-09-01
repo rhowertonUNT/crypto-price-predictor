@@ -19,7 +19,7 @@
     button{background:linear-gradient(45deg,#667eea,#764ba2);color:#fff;border:0;padding:10px 16px;border-radius:10px;font-weight:600;cursor:pointer;transition:transform .15s}
     button:hover{transform:translateY(-1px)}
     button:disabled{opacity:.55;cursor:not-allowed;transform:none}
-    select,input{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);border-radius:8px;color:#fff;padding:8px}
+    select{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);border-radius:8px;color:#fff;padding:8px}
     .chart-container{position:relative;height:420px;background:rgba(255,255,255,.05);border-radius:10px;padding:10px}
     .metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:10px}
     .metric{background:rgba(255,255,255,.1);border-radius:10px;padding:12px;text-align:center}
@@ -28,6 +28,11 @@
     .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
     .status{background:rgba(0,255,0,.1);border:1px solid rgba(0,255,0,.3);border-radius:8px;padding:12px;margin-top:10px}
     .badge{position:fixed;top:14px;left:14px;background:#005a27;color:#fff;border-radius:10px;padding:8px 12px;font-weight:700;border:1px solid rgba(255,255,255,.2)}
+    table{width:100%;margin-top:10px;border-collapse:collapse}
+    th,td{padding:6px}
+    thead th{border-bottom:1px solid rgba(255,255,255,.3);text-align:left}
+    tbody td{text-align:right}
+    tbody td:first-child{text-align:left}
   </style>
 </head>
 <body>
@@ -46,6 +51,8 @@
         <button id="btnGen" onclick="generateData()">Generate sample</button>
         <button id="btnFeat" onclick="engineerFeatures()" disabled>Engineer features</button>
         <button id="btnTrain" onclick="trainModel()" disabled>Train model</button>
+        <button id="btnUpdate" onclick="trainModel()" disabled>Update model</button>
+        <button id="btnCompare" onclick="compareAll()" disabled>Compare all models</button>
         <button id="btnPred" onclick="makePrediction()" disabled>Predict next</button>
       </div>
       <div class="row">
@@ -102,8 +109,21 @@
             <div>MAE in price units</div>
           </div>
         </div>
+
+        <table id="resultsTable">
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th style="text-align:right">MAE (price)</th>
+              <th style="text-align:right">MAPE %</th>
+              <th style="text-align:right">SMAPE %</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
         <div style="margin-top:10px;font-size:.95rem">
-          Baseline is naive next=now. Logs show model vs baseline for honesty.
+          Baseline is naive next equals now. Table compares Baseline, Linear, MLP, and LSTM.
         </div>
       </div>
     </div>
@@ -116,9 +136,9 @@
 
   <script>
     // ------------------------ State ------------------------
-    let rawData = [];              // [{date, price, volume?}]
-    let features = null;           // engineered feature pack
-    let trainedModel = null;       // tf.Model
+    let rawData = [];
+    let features = null;
+    let trainedModel = null;
     let priceChart = null;
     let currentCrypto = 'btc';
     let retrainCount = 0;
@@ -139,13 +159,26 @@
     function setStatus(m){document.getElementById('status').textContent=m;}
     function tsSplit(arr, frac=0.8){const n=arr.length,cut=Math.floor(n*frac);return [arr.slice(0,cut), arr.slice(cut)];}
     function mae(y,yh){let s=0;for(let i=0;i<y.length;i++)s+=Math.abs(y[i]-yh[i]);return s/y.length;}
-    function mape(y,yh){let s=0;for(let i=0;i<y.length;i++)s+=Math.abs((y[i]-yh[i])/y[i]);return s/y.length*100;}
+    function mape(y,yh){let s=0;for(let i=0;i<y.length;i++){const denom=Math.max(1e-9,Math.abs(y[i]));s+=Math.abs((y[i]-yh[i])/denom);}return s/y.length*100;}
     function smape(y,yh){let s=0;for(let i=0;i<y.length;i++)s+=Math.abs(yh[i]-y[i])/((Math.abs(y[i])+Math.abs(yh[i]))/2);return s/y.length*100;}
     function to2d(a){return tf.tensor2d(a,[a.length,a[0].length]);}
-    function to3d(samples, L){
-      // samples: array of feature rows where first L entries are sequential returns
-      const seq = samples.map(row => row.slice(0,L).map(v=>[v])); // shape [samples, L, 1]
-      return tf.tensor3d(seq,[seq.length,L,1]);
+    function to3d(samples, L){const seq=samples.map(row=>row.slice(0,L).map(v=>[v]));return tf.tensor3d(seq,[seq.length,L,1]);}
+    function formatPrice(v){return currentCrypto==='btc' ? '$'+Math.round(v) : '$'+v.toFixed(3);}
+
+    // results table helpers
+    function writeResultsRow(name, maePrice, mapePct, smapePct) {
+      const tb = document.querySelector('#resultsTable tbody');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="text-align:left">${name}</td>
+        <td>${formatPrice(maePrice)}</td>
+        <td>${mapePct.toFixed(2)}</td>
+        <td>${smapePct.toFixed(2)}</td>`;
+      tb.appendChild(tr);
+    }
+    function clearResultsTable() {
+      const tb = document.querySelector('#resultsTable tbody');
+      tb.innerHTML = '';
     }
 
     // ------------------------ UI basics ------------------------
@@ -160,10 +193,15 @@
       rawData=[]; features=null; trainedModel=null;
       document.getElementById('btnFeat').disabled=true;
       document.getElementById('btnTrain').disabled=true;
+      document.getElementById('btnUpdate').disabled=true;
+      document.getElementById('btnCompare').disabled=true;
       document.getElementById('btnPred').disabled=true;
       document.getElementById('smape').textContent='-';
       document.getElementById('mae').textContent='-';
+      clearResultsTable();
       if(clearChart && priceChart){priceChart.destroy();priceChart=null;}
+      setStatus('Select an asset, load data, engineer features.');
+      retrainCount = 0;
     }
 
     // ------------------------ Data ------------------------
@@ -225,7 +263,7 @@
         options:{
           responsive:true,maintainAspectRatio:false,
           plugins:{legend:{labels:{color:'#fff'}}},
-          scales:{x:{ticks:{color:'#fff',maxTicksLimit:8}},y:{ticks:{color:'#fff',callback:(v)=>'$'+(currentCrypto==='btc'?Math.round(v):v.toFixed(3))}}}
+          scales:{x:{ticks:{color:'#fff',maxTicksLimit:8}},y:{ticks:{color:'#fff',callback:(v)=>'$'+(currentCrypto==='btc'?Math.round(v):Number(v).toFixed(3))}}}
         }
       });
     }
@@ -251,43 +289,41 @@
       }
 
       // windowed features
-      const L = 7; // length of sequence window
+      const L = 7;
       const X=[], y=[], idx=[];
       for(let i=L;i<prices.length-1;i++){
-        const seq = logret.slice(i-L+1,i+1);         // L values ending at i
+        const seq = logret.slice(i-L+1,i+1);
         const normPrice = (prices[i]-rollMean[i])/rollStd[i];
-        // simple up ratio
         const up = Math.max(0, prices[i]-prices[i-1]);
         const down = Math.max(0, prices[i-1]-prices[i])+1e-8;
         const rsiLite = up/(up+down);
 
-        const row = [...seq, normPrice, rsiLite];    // first L are sequential
+        const row = [...seq, normPrice, rsiLite];
         X.push(row);
-        y.push((prices[i+1]-rollMean[i])/rollStd[i]); // predict next normalized by today scale
+        y.push((prices[i+1]-rollMean[i])/rollStd[i]);
         idx.push(i);
       }
 
       features = { X, y, idx, rollMean, rollStd, prices, dates, L };
       log(`Engineered ${X.length} sequences with window L=${L}`);
       document.getElementById('btnTrain').disabled=false;
+      document.getElementById('btnCompare').disabled=false;
       setStatus(`Features ready. Choose model and train.`);
     }
 
-    // ------------------------ Training ------------------------
+    // ------------------------ Training and comparison ------------------------
     async function trainModel(){
       if(!features){log('No features. Click Engineer features.');return;}
       const {X,y,idx,rollMean,rollStd,prices,L} = features;
 
-      // time-ordered split
       const [Xtr,Xte] = tsSplit(X,0.8);
       const [ytr,yte] = tsSplit(y,0.8);
       if(Xte.length<5){log('Not enough test points. Load more data.');return;}
 
-      // baseline: next = current normalized price (the second last feature)
-      const basePred = Xte.map(row => row[row.length-2]);
-      const baseSMAPE = smape(yte, basePred);
+      // baseline in normalized space
+      const baseNorm = Xte.map(row => row[row.length-2]);
+      const baseSMAPE = smape(yte, baseNorm);
 
-      // build model
       const modelType = document.getElementById('modelType').value;
       let model;
 
@@ -298,7 +334,7 @@
         await model.fit(trainX, trainY, {epochs:40,batchSize:16,verbose:0,validationSplit:0.1});
         trainX.dispose(); trainY.dispose();
       } else if(modelType==='lstm'){
-        const trainX3 = to3d(Xtr,L), testX3 = to3d(Xte,L);
+        const trainX3 = to3d(Xtr,L);
         const trainY = tf.tensor2d(ytr,[ytr.length,1]);
         model = tf.sequential({
           layers:[
@@ -309,9 +345,8 @@
         });
         model.compile({optimizer:tf.train.adam(0.005),loss:'meanSquaredError'});
         await model.fit(trainX3, trainY, {epochs:40,batchSize:16,verbose:0,validationSplit:0.1});
-        trainX3.dispose(); testX3.dispose(); trainY.dispose();
+        trainX3.dispose(); trainY.dispose();
       } else {
-        // MLP demo
         model = tf.sequential({
           layers:[
             tf.layers.dense({inputShape:[Xtr[0].length],units:32,activation:'relu'}),
@@ -325,7 +360,7 @@
         trainX.dispose(); trainY.dispose();
       }
 
-      // evaluate
+      // predictions in normalized space
       let predArr;
       if(modelType==='lstm'){
         const testX3 = to3d(Xte,L);
@@ -341,32 +376,60 @@
 
       // metrics in normalized space
       const modelSMAPE = smape(yte, predArr);
-      const modelMAE_norm = mae(yte, predArr);
 
-      // convert last test segment back to price units for MAE display
-      const start = idx.length - Xte.length; // position in features
-      const denormTrue=[], denormPred=[];
-      for(let i=0;i<Xte.length;i++){
-        const pos = idx[start + i]; // index in price series for scale
+      // denormalize to price units for MAE and MAPE
+      const start = idx.length - Xte.length;
+      const denormTrue = [], denormPred = [], denormBase = [];
+      for (let i = 0; i < Xte.length; i++) {
+        const pos = idx[start + i];
         const mean = rollMean[pos], sd = rollStd[pos];
         denormTrue.push(yte[i]*sd + mean);
         denormPred.push(predArr[i]*sd + mean);
+        const baseP = baseNorm[i]*sd + mean;
+        denormBase.push(baseP);
       }
       const modelMAE_price = mae(denormTrue, denormPred);
+      const modelMAPE_price = mape(denormTrue, denormPred);
+      const baseMAE_price = mae(denormTrue, denormBase);
+      const baseMAPE_price = mape(denormTrue, denormBase);
 
-      // show metrics
+      // tiles
       document.getElementById('smape').textContent = modelSMAPE.toFixed(2) + '%';
-      document.getElementById('mae').textContent   = (currentCrypto==='btc' ? '$' + modelMAE_price.toFixed(0) : '$' + modelMAE_price.toFixed(3));
+      document.getElementById('mae').textContent   = formatPrice(modelMAE_price);
 
-      log(`Baseline SMAPE: ${baseSMAPE.toFixed(2)}%`);
-      log(`Model SMAPE:    ${modelSMAPE.toFixed(2)}%`);
-      log(`Model MAE (price units): ${modelMAE_price.toFixed(currentCrypto==='btc'?0:3)}`);
+      // results table
+      if (retrainCount === 0) {
+        clearResultsTable();
+        writeResultsRow('Baseline (naive next=now)', baseMAE_price, baseMAPE_price, baseSMAPE);
+      }
+      writeResultsRow(modelType.toUpperCase(), modelMAE_price, modelMAPE_price, modelSMAPE);
+
+      log(`Baseline  MAE ${formatPrice(baseMAE_price)}  MAPE ${baseMAPE_price.toFixed(2)}%  SMAPE ${baseSMAPE.toFixed(2)}%`);
+      log(`Model     MAE ${formatPrice(modelMAE_price)}  MAPE ${modelMAPE_price.toFixed(2)}%  SMAPE ${modelSMAPE.toFixed(2)}%`);
 
       trainedModel = model;
       localStorage.setItem('modelType', modelType);
       retrainCount += 1;
       document.getElementById('btnPred').disabled=false;
-      setStatus(`Model trained. Press Train again later to refit on the most recent window for a walk-forward effect.`);
+      document.getElementById('btnUpdate').disabled=false;
+      setStatus('Model trained. You can update or compare all.');
+    }
+
+    async function compareAll(){
+      if (!features) { log('No features yet. Click Engineer features.'); return; }
+      clearResultsTable();
+      retrainCount = 0;
+
+      const sel = document.getElementById('modelType');
+      const original = sel.value;
+
+      const models = ['linear','neural','lstm'];
+      for (const m of models) {
+        sel.value = m;
+        log(`Comparing ${m.toUpperCase()}...`);
+        await trainModel();
+      }
+      sel.value = original;
     }
 
     // ------------------------ Predict next step ------------------------
@@ -378,7 +441,7 @@
       let yhatTensor;
 
       if(modelType==='lstm'){
-        const inp = to3d([lastX], L); // [1,L,1]
+        const inp = to3d([lastX], L);
         yhatTensor = trainedModel.predict(inp);
         yhatTensor.data().then(v=>{
           const norm = v[0];
@@ -386,8 +449,8 @@
           const pred = norm*rollStd[i] + rollMean[i];
           const curr = prices[i];
           const chg = (pred/curr - 1)*100;
-          log(`Current $${formatP(curr)}  Predicted next $${formatP(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
-          setStatus(`Next step prediction: $${formatP(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
+          log(`Current ${formatPrice(curr)}  Predicted next ${formatPrice(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
+          setStatus(`Next step prediction: ${formatPrice(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
         }).finally(()=>yhatTensor.dispose());
       } else {
         const inp = to2d([lastX]);
@@ -398,13 +461,11 @@
           const pred = norm*rollStd[i] + rollMean[i];
           const curr = prices[i];
           const chg = (pred/curr - 1)*100;
-          log(`Current $${formatP(curr)}  Predicted next $${formatP(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
-          setStatus(`Next step prediction: $${formatP(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
+          log(`Current ${formatPrice(curr)}  Predicted next ${formatPrice(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
+          setStatus(`Next step prediction: ${formatPrice(pred)}  (${chg>=0?'+':''}${chg.toFixed(2)}%)`);
         }).finally(()=>yhatTensor.dispose());
       }
     }
-
-    function formatP(v){return currentCrypto==='btc'?Math.round(v).toString():v.toFixed(3)}
 
     // ------------------------ Init ------------------------
     (function init(){
