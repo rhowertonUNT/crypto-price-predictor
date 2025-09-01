@@ -243,7 +243,8 @@
         <div class="card control-panel">
             <h3>🎯 ML Pipeline Control</h3>
             <div class="button-group">
-                <button onclick="generateData()">📊 Generate Data</button>
+                <button onclick="fetchRealData()">📊 Load Real Data</button>
+                <button onclick="generateData()">🎲 Generate Sample Data</button>
                 <button onclick="engineerFeatures()" id="featuresBtn" disabled>⚙️ Engineer Features</button>
                 <button onclick="trainModel()" id="trainBtn" disabled>🧠 Train Model</button>
                 <button onclick="makePrediction()" id="predictBtn" disabled>🔮 Predict Price</button>
@@ -257,6 +258,14 @@
                     <option value="xlm">Stellar Lumens (XLM)</option>
                 </select>
                 
+                <label>Data Period:</label>
+                <select id="dataPeriod">
+                    <option value="7">7 Days (Hourly)</option>
+                    <option value="30">30 Days (Hourly)</option>
+                    <option value="90">90 Days (Daily)</option>
+                    <option value="365" selected>1 Year (Daily)</option>
+                </select>
+                
                 <label>Model:</label>
                 <select id="modelType">
                     <option value="neural">Neural Network</option>
@@ -265,7 +274,7 @@
             </div>
             
             <div class="status" id="status">
-                💡 Welcome! Select a cryptocurrency and click "Generate Data" to start.
+                💡 Welcome! Select data period and click "Load Real Data" for live analysis up to current time.
             </div>
         </div>
         
@@ -306,9 +315,9 @@
         let currentCrypto = 'btc';
         
         const cryptoConfig = {
-            btc: { name: 'Bitcoin', symbol: 'BTC', startPrice: 45000, color: '#f7931a' },
-            xrp: { name: 'XRP', symbol: 'XRP', startPrice: 0.65, color: '#00aae4' },
-            xlm: { name: 'Stellar', symbol: 'XLM', startPrice: 0.12, color: '#7c4dff' }
+            btc: { name: 'Bitcoin', symbol: 'BTC', id: 'bitcoin', color: '#f7931a' },
+            xrp: { name: 'XRP', symbol: 'XRP', id: 'ripple', color: '#00aae4' },
+            xlm: { name: 'Stellar', symbol: 'XLM', id: 'stellar', color: '#7c4dff' }
         };
         
         function log(message) {
@@ -344,13 +353,52 @@
             }
         }
         
+        async function fetchRealData() {
+            const config = cryptoConfig[currentCrypto];
+            log(`🌐 Fetching real ${config.name} data from CoinGecko...`);
+            updateStatus(`📡 Loading live market data for ${config.name}...`);
+            
+            try {
+                // CoinGecko API - free tier, no API key required
+                const response = await fetch(`https://api.coingecko.com/api/v3/coins/${config.id}/market_chart?vs_currency=usd&days=365&interval=daily`);
+                
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                // Transform API data to our format
+                rawData = data.prices.map(([timestamp, price]) => ({
+                    date: new Date(timestamp),
+                    price: price,
+                    volume: data.total_volumes.find(v => v[0] === timestamp)?.[1] || 0
+                }));
+                
+                log(`✅ Loaded ${rawData.length} days of real market data`);
+                log(`📈 Price range: ${Math.min(...rawData.map(d => d.price)).toFixed(currentCrypto === 'btc' ? 0 : 3)} - ${Math.max(...rawData.map(d => d.price)).toFixed(currentCrypto === 'btc' ? 0 : 3)}`);
+                log(`📊 Latest price: ${rawData[rawData.length - 1].price.toFixed(currentCrypto === 'btc' ? 0 : 3)}`);
+                log(`🗓️ Data period: ${rawData[0].date.toLocaleDateString()} to ${rawData[rawData.length - 1].date.toLocaleDateString()}`);
+                
+                createChart();
+                document.getElementById('featuresBtn').disabled = false;
+                updateStatus(`✅ Real ${config.name} data loaded! Ready for ML analysis with live market data.`);
+                
+            } catch (error) {
+                log(`❌ Error fetching data: ${error.message}`);
+                log(`🔄 Falling back to sample data...`);
+                updateStatus(`⚠️ API unavailable, using sample data. Try again later.`);
+                generateData(); // Fallback to synthetic data
+            }
+        }
+        
         function generateData() {
             const config = cryptoConfig[currentCrypto];
-            log(`🚀 Generating ${config.name} price data...`);
-            updateStatus(`📊 Creating synthetic ${config.name} price data...`);
+            log(`🎲 Generating synthetic ${config.name} data for demo...`);
+            updateStatus(`📊 Creating realistic ${config.name} price simulation...`);
             
             rawData = [];
-            let price = config.startPrice;
+            let price = config.id === 'bitcoin' ? 45000 : (config.id === 'ripple' ? 0.65 : 0.12);
             
             for (let i = 0; i < 365; i++) {
                 // Simulate price movements
@@ -360,14 +408,16 @@
                 
                 rawData.push({
                     date: new Date(Date.now() - (365 - i) * 24 * 60 * 60 * 1000),
-                    price: Math.max(price, config.startPrice * 0.1)
+                    price: Math.max(price, price * 0.1)
                 });
             }
             
-            log(`✅ Generated ${rawData.length} days of data`);
+            log(`✅ Generated ${rawData.length} days of synthetic data`);
+            log(`📈 Simulated price range: ${Math.min(...rawData.map(d => d.price)).toFixed(currentCrypto === 'btc' ? 0 : 3)} - ${Math.max(...rawData.map(d => d.price)).toFixed(currentCrypto === 'btc' ? 0 : 3)}`);
+            
             createChart();
             document.getElementById('featuresBtn').disabled = false;
-            updateStatus(`✅ Data generated! Ready for feature engineering.`);
+            updateStatus(`✅ Synthetic data ready! This is demo mode - click "Load Real Data" for live prices.`);
         }
         
         function createChart() {
@@ -559,7 +609,9 @@
         
         // Initialize
         log("🌟 Multi-Crypto ML Platform initialized");
-        log("📚 Select a cryptocurrency and click Generate Data to start!");
+        log("🌐 Click 'Load Real Data' to analyze live market prices");
+        log("🎲 Or use 'Generate Sample Data' for demo mode");
+        log("📚 UNT Alumni project showcasing ML engineering skills");
     </script>
 </body>
 </html>
